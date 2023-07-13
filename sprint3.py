@@ -5,10 +5,10 @@ import pandas as pd
 
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.python_operator import PythonOperator, BranchPythonOperator
+from airflow.operators.python import PythonOperator, BranchPythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.hooks.http_hook import HttpHook
+from airflow.providers.http.hooks.http import HttpHook
 
 http_conn_id = HttpHook.get_connection('http_conn_id')
 api_key = http_conn_id.extra_dejson.get('api_key')
@@ -16,8 +16,8 @@ base_url = http_conn_id.host
 
 postgres_conn_id = 'postgresql_de'
 
-nickname = 
-cohort = 
+nickname = 'tbynin'
+cohort = '15'
 
 headers = {
     'X-Nickname': nickname,
@@ -164,6 +164,13 @@ with DAG(
         parameters={"date": {business_dt}}
     )
 
+    update_f_customer_retention = PostgresOperator(
+        task_id='update_f_customer_retention',
+        postgres_conn_id=postgres_conn_id,
+        sql="sql/mart.f_customer_retention.sql",
+        parameters={"date": {business_dt}}
+    )
+    
     (
             generate_report
             >> get_report
@@ -171,4 +178,5 @@ with DAG(
             >> upload_user_order_inc
             >> [update_d_item_table, update_d_city_table, update_d_customer_table]
             >> update_f_sales
+            >> update_f_customer_retention
     )
