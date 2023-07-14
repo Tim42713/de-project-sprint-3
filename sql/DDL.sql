@@ -17,5 +17,8 @@ CREATE TABLE IF NOT EXISTS mart.f_customer_retention (
     item_id VARCHAR(30),
     new_customers_revenue NUMERIC(14, 3),
     returning_customers_revenue NUMERIC(14, 3),
-    customers_refunded INT
+    customers_refunded INT,
+
+-- добавим ограничение для пары period_id и item_id
+    CONSTRAINT f_customer_retention_pk PRIMARY KEY (period_id, item_id)
 );

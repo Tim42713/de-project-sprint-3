@@ -90,6 +90,11 @@ def upload_data_to_staging(filename, date, pg_table, pg_schema, ti):
     open(f"{local_filename}", "wb").write(response.content)
     print(response.content)
 
+    # Удалить данные на текущий день из стейджинг таблицы
+    delete_query = f"DELETE FROM {pg_schema}.{pg_table} WHERE date_time::date = '{date}'"
+    postgres_hook = PostgresHook(postgres_conn_id)
+    postgres_hook.run(sql=delete_query)
+
     df = pd.read_csv(local_filename)
     df=df.drop('id', axis=1)
     df=df.drop_duplicates(subset=['uniq_id'])
@@ -108,7 +113,7 @@ args = {
     'email': ['student@example.com'],
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 0
+    'retries': 5
 }
 
 business_dt = '{{ ds }}'
@@ -120,6 +125,7 @@ with DAG(
         catchup=True,
         start_date=datetime.today() - timedelta(days=7),
         end_date=datetime.today() - timedelta(days=1),
+        max_active_runs=1
 ) as dag:
     generate_report = PythonOperator(
         task_id='generate_report',
@@ -142,33 +148,26 @@ with DAG(
                    'pg_table': 'user_order_log',
                    'pg_schema': 'staging'})
 
-    update_d_item_table = PostgresOperator(
-        task_id='update_d_item',
-        postgres_conn_id=postgres_conn_id,
-        sql="sql/mart.d_item.sql")
+    dimension_tasks = []
 
-    update_d_customer_table = PostgresOperator(
-        task_id='update_d_customer',
-        postgres_conn_id=postgres_conn_id,
-        sql="sql/mart.d_customer.sql")
-
-    update_d_city_table = PostgresOperator(
-        task_id='update_d_city',
-        postgres_conn_id=postgres_conn_id,
-        sql="sql/mart.d_city.sql")
+    for dimension_table in ['d_city', 'd_item', 'd_customer']:
+        dimension_tasks.append(PostgresOperator(
+            task_id=f'update_{dimension_table}',
+            postgres_conn_id=postgres_conn_id,
+            sql=f'sql/mart.{dimension_table}.sql'))
 
     update_f_sales = PostgresOperator(
         task_id='update_f_sales',
         postgres_conn_id=postgres_conn_id,
         sql="sql/mart.f_sales.sql",
-        parameters={"date": {business_dt}}
+        parameters={"date": business_dt}
     )
 
     update_f_customer_retention = PostgresOperator(
         task_id='update_f_customer_retention',
         postgres_conn_id=postgres_conn_id,
         sql="sql/mart.f_customer_retention.sql",
-        parameters={"date": {business_dt}}
+        parameters={"date": business_dt}
     )
     
     (
@@ -176,7 +175,7 @@ with DAG(
             >> get_report
             >> get_increment
             >> upload_user_order_inc
-            >> [update_d_item_table, update_d_city_table, update_d_customer_table]
+            >> dimension_tasks
             >> update_f_sales
             >> update_f_customer_retention
     )

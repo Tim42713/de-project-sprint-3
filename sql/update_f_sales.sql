@@ -1,5 +1,5 @@
 -- добавляем для идемпотентности
-DELETE FROM mart.f_sales WHERE EXISTS (SELECT 1 FROM mart.d_calendar WHERE mart.d_calendar.date_id = mart.f_sales.date_id AND mart.d_calendar.date_actual = CURRENT_DATE);
+DELETE FROM mart.f_sales WHERE EXISTS (SELECT 1 FROM mart.d_calendar WHERE mart.d_calendar.date_id = mart.f_sales.date_id AND mart.d_calendar.date_actual = '{{ds}}');
 
 
 -- обновили столбец mart.f_sales
@@ -16,4 +16,4 @@ SELECT dc.date_id,
        status
 FROM staging.user_order_log AS uol
 LEFT JOIN mart.d_calendar AS dc ON uol.date_time::DATE = dc.date_actual
-WHERE uol.date_time::DATE = CURRENT_DATE;
+WHERE uol.date_time::DATE = '{{ds}}';

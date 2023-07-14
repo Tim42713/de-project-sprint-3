@@ -1,6 +1,5 @@
--- добавляем для идемпотентности
-DELETE FROM mart.f_customer_retention WHERE period_id = EXTRACT('week' FROM current_date);
-DELETE FROM mart.f_customer_retention WHERE period_id = EXTRACT('week' FROM current_date)-1;
+DELETE FROM mart.f_customer_retention WHERE period_id = DATE_PART('week', '{{ds}}'::date);
+DELETE FROM mart.f_customer_retention WHERE period_id = DATE_PART('week', '{{ds}}'::date) - 1;
 
 -- заполняем таблицу f_customer_retention
 INSERT INTO mart.f_customer_retention (new_customers_count, returning_customers_count, refunded_customer_count, period_name, period_id, item_id,
@@ -27,13 +26,15 @@ SELECT COUNT(DISTINCT CASE WHEN status = 'new'
                 THEN quantity 
            END) AS customers_refunded
 FROM (
-  SELECT DATE_PART('week', date_time) AS weekly,
-         customer_id,
-	     quantity,
-	     payment_amount,
-	     CASE WHEN COUNT(customer_id) OVER(PARTITION BY customer_id, date_part('week', date_time)) = 1
-	          THEN 'new' ELSE status
-	     END AS status,
-         item_id
-  FROM staging.user_order_log) AS prep
+       SELECT DATE_PART('week', c.date_actual) AS weekly,
+              u.customer_id,
+              s.quantity,
+              s.payment_amount,
+              CASE WHEN COUNT(u.customer_id) OVER(PARTITION BY u.customer_id, DATE_PART('week', c.date_actual)) = 1
+                   THEN 'new' ELSE s.status
+              END AS status,
+              s.item_id
+       FROM mart.f_sales s
+       JOIN mart.d_customer u ON s.customer_id = u.customer_id
+       JOIN mart.d_calendar c ON s.date_id = c.date_id) AS prep
 GROUP BY weekly, item_id;
